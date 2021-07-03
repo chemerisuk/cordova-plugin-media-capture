@@ -34,6 +34,7 @@ import android.os.Bundle;
 import org.apache.cordova.file.FileUtils;
 import org.apache.cordova.file.LocalFilesystemURL;
 
+import org.apache.cordova.BuildHelper;
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaPlugin;
 import org.apache.cordova.LOG;
@@ -57,6 +58,7 @@ import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Environment;
 import android.provider.MediaStore;
+import androidx.core.content.FileProvider;
 
 public class Capture extends CordovaPlugin {
 
@@ -84,6 +86,7 @@ public class Capture extends CordovaPlugin {
 
     private int numPics;                            // Number of pictures before capture activity
     private Uri imageUri;
+    private String applicationId;
 
 //    public void setContext(Context mCtx)
 //    {
@@ -122,6 +125,11 @@ public class Capture extends CordovaPlugin {
 
     @Override
     public boolean execute(String action, JSONArray args, CallbackContext callbackContext) throws JSONException {
+        //Adding an API to CoreAndroid to get the BuildConfigValue
+        //This allows us to not make this a breaking change to embedding
+        this.applicationId = (String) BuildHelper.getBuildConfigValue(cordova.getActivity(), "APPLICATION_ID");
+        this.applicationId = preferences.getString("applicationId", this.applicationId);
+
         if (action.equals("getFormatData")) {
             JSONObject obj = getFormatData(args.getString(0), args.getString(1));
             callbackContext.success(obj);
@@ -253,6 +261,39 @@ public class Capture extends CordovaPlugin {
     }
 
     /**
+     * Create a file in the applications temporary directory based upon the supplied encoding.
+     *
+     * @param encodingType of the image to be taken
+     * @return a File object pointing to the temporary picture
+     */
+    private File createCaptureFile(String mimeType) {
+        return createCaptureFile(mimeType, "");
+    }
+
+    /**
+     * Create a file in the applications temporary directory based upon the supplied encoding.
+     *
+     * @param encodingType of the image to be taken
+     * @param fileName or resultant File object.
+     * @return a File object pointing to the temporary picture
+     */
+    private File createCaptureFile(String mimeType, String fileName) {
+        if (fileName.isEmpty()) {
+            fileName = ".Pic";
+        }
+
+        if (mimeType.equals(IMAGE_JPEG)) {
+            fileName = fileName + ".jpeg";
+        } else if (mimeType.equals(VIDEO_3GPP) || mimeType.equals(VIDEO_MP4)) {
+            fileName = fileName + ".mp4";
+        } else {
+            throw new IllegalArgumentException("Invalid Mime Type: " + mimeType);
+        }
+
+        return new File(getTempDirectoryPath(), fileName);
+    }
+
+    /**
      * Sets up an intent to capture images.  Result handled by onActivityResult()
      */
     private void captureImage(Request req) {
@@ -276,13 +317,21 @@ public class Capture extends CordovaPlugin {
 
             Intent intent = new Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE);
 
-            ContentResolver contentResolver = this.cordova.getActivity().getContentResolver();
-            ContentValues cv = new ContentValues();
-            cv.put(MediaStore.Images.Media.MIME_TYPE, IMAGE_JPEG);
-            imageUri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cv);
+            File photo = createCaptureFile(IMAGE_JPEG);
+            imageUri = FileProvider.getUriForFile(cordova.getActivity(),
+                    applicationId + ".cordova.plugin.mediacapture.provider",
+                    photo);
+            intent.putExtra(android.provider.MediaStore.EXTRA_OUTPUT, imageUri);
+            //We can write to this URI, this will hopefully allow us to write files to get to the next step
+            intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+
+            // ContentResolver contentResolver = this.cordova.getActivity().getContentResolver();
+            // ContentValues cv = new ContentValues();
+            // cv.put(MediaStore.Images.Media.MIME_TYPE, IMAGE_JPEG);
+            // imageUri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cv);
             LOG.d(LOG_TAG, "Taking a picture and saving to: " + imageUri.toString());
 
-            intent.putExtra(android.provider.MediaStore.EXTRA_OUTPUT, imageUri);
+            // intent.putExtra(android.provider.MediaStore.EXTRA_OUTPUT, imageUri);
 
             this.cordova.startActivityForResult((CordovaPlugin) this, intent, req.requestCode);
         }
