@@ -84,7 +84,7 @@ xmlns:android="http://schemas.android.com/apk/res/android"
 
         <config-file target="AndroidManifest.xml" parent="application">
             <provider
-                android:name="org.apache.cordova.mediacapture.FileProvider"
+                android:name="android.support.v4.content.FileProvider"
                 android:authorities="${applicationId}.cordova.plugin.mediacapture.provider"
                 android:exported="false"
                 android:grantUriPermissions="true" >
@@ -97,7 +97,6 @@ xmlns:android="http://schemas.android.com/apk/res/android"
         <source-file src="src/android/Capture.java" target-dir="src/org/apache/cordova/mediacapture" />
         <source-file src="src/android/FileHelper.java" target-dir="src/org/apache/cordova/mediacapture" />
         <source-file src="src/android/PendingRequests.java" target-dir="src/org/apache/cordova/mediacapture" />
-        <source-file src="src/android/FileProvider.java" target-dir="src/org/apache/cordova/mediacapture" />
         <source-file src="src/android/xml/camera_provider_paths.xml" target-dir="res/xml" />
 
         <preference name="ANDROID_SUPPORT_V4_VERSION" default="27.+"/>

@@ -80,12 +80,16 @@ public class Capture extends CordovaPlugin {
     private static final int CAPTURE_PERMISSION_DENIED = 4;
     private static final int CAPTURE_NOT_SUPPORTED = 20;
 
+    private static final String CAMERA_URI_KEY = "cameraFileUri";
+    private static final String CAMERA_PATH_KEY = "cameraFilePath";
+
     private boolean cameraPermissionInManifest;     // Whether or not the CAMERA permission is declared in AndroidManifest.xml
 
     private final PendingRequests pendingRequests = new PendingRequests();
 
     private int numPics;                            // Number of pictures before capture activity
-    private Uri imageUri;
+    private Uri cameraFileUri;
+    private String cameraFilePath;
     private String applicationId;
 
 //    public void setContext(Context mCtx)
@@ -279,7 +283,7 @@ public class Capture extends CordovaPlugin {
      */
     private File createCaptureFile(String mimeType, String fileName) {
         if (fileName.isEmpty()) {
-            fileName = ".Pic";
+            fileName = System.currentTimeMillis() + "";
         }
 
         if (mimeType.equals(IMAGE_JPEG)) {
@@ -318,20 +322,21 @@ public class Capture extends CordovaPlugin {
             Intent intent = new Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE);
 
             File photo = createCaptureFile(IMAGE_JPEG);
-            imageUri = FileProvider.getUriForFile(cordova.getActivity(),
+            cameraFilePath = photo.getAbsolutePath();
+            cameraFileUri = FileProvider.getUriForFile(cordova.getActivity(),
                     applicationId + ".cordova.plugin.mediacapture.provider",
                     photo);
-            intent.putExtra(android.provider.MediaStore.EXTRA_OUTPUT, imageUri);
+            intent.putExtra(android.provider.MediaStore.EXTRA_OUTPUT, cameraFileUri);
             //We can write to this URI, this will hopefully allow us to write files to get to the next step
             intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
 
             // ContentResolver contentResolver = this.cordova.getActivity().getContentResolver();
             // ContentValues cv = new ContentValues();
             // cv.put(MediaStore.Images.Media.MIME_TYPE, IMAGE_JPEG);
-            // imageUri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cv);
-            LOG.d(LOG_TAG, "Taking a picture and saving to: " + imageUri.toString());
+            // cameraFileUri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cv);
+            LOG.d(LOG_TAG, "Taking a picture and saving to: " + cameraFileUri.toString());
 
-            // intent.putExtra(android.provider.MediaStore.EXTRA_OUTPUT, imageUri);
+            // intent.putExtra(android.provider.MediaStore.EXTRA_OUTPUT, cameraFileUri);
 
             this.cordova.startActivityForResult((CordovaPlugin) this, intent, req.requestCode);
         }
@@ -350,6 +355,15 @@ public class Capture extends CordovaPlugin {
             PermissionHelper.requestPermission(this, req.requestCode, Manifest.permission.CAMERA);
         } else {
             Intent intent = new Intent(android.provider.MediaStore.ACTION_VIDEO_CAPTURE);
+
+            File photo = createCaptureFile(VIDEO_MP4);
+            cameraFilePath = photo.getAbsolutePath();
+            cameraFileUri = FileProvider.getUriForFile(cordova.getActivity(),
+                    applicationId + ".cordova.plugin.mediacapture.provider",
+                    photo);
+            intent.putExtra(android.provider.MediaStore.EXTRA_OUTPUT, cameraFileUri);
+            //We can write to this URI, this will hopefully allow us to write files to get to the next step
+            intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
 
             if(Build.VERSION.SDK_INT > 7){
                 intent.putExtra("android.intent.extra.durationLimit", req.duration);
@@ -434,7 +448,7 @@ public class Capture extends CordovaPlugin {
 
     public void onImageActivityResult(Request req) {
         // Add image to results
-        req.results.put(createMediaFile(imageUri));
+        req.results.put(createMediaFile(cameraFileUri));
 
         checkForDuplicateImage();
 
@@ -485,7 +499,8 @@ public class Capture extends CordovaPlugin {
      * @throws IOException
      */
     private JSONObject createMediaFile(Uri data) {
-        File fp = webView.getResourceApi().mapUriToFile(data);
+        File fp = new File(cameraFilePath);
+        // File fp = webView.getResourceApi().mapUriToFile(data);
         JSONObject obj = new JSONObject();
 
         Class webViewClass = webView.getClass();
@@ -627,11 +642,31 @@ public class Capture extends CordovaPlugin {
         }
     }
 
+    /**
+     * Taking or choosing a picture launches another Activity, so we need to implement the
+     * save/restore APIs to handle the case where the CordovaActivity is killed by the OS
+     * before we get the launched Activity's result.
+     */
     public Bundle onSaveInstanceState() {
-        return pendingRequests.toBundle();
+        Bundle state = pendingRequests.toBundle();
+
+        if (cameraFileUri != null) {
+            state.putString(CAMERA_URI_KEY, cameraFileUri.toString());
+        }
+        if (cameraFilePath != null) {
+            state.putString(CAMERA_PATH_KEY, cameraFilePath);
+        }
+        return state;
     }
 
     public void onRestoreStateForActivityResult(Bundle state, CallbackContext callbackContext) {
         pendingRequests.setLastSavedState(state, callbackContext);
+
+        if (state.containsKey(CAMERA_URI_KEY)) {
+            cameraFileUri = Uri.parse(state.getString(CAMERA_URI_KEY));
+        }
+        if (state.containsKey(CAMERA_PATH_KEY)) {
+            cameraFilePath = state.getString(CAMERA_PATH_KEY);
+        }
     }
 }
